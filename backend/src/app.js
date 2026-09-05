@@ -5,8 +5,13 @@ const { pinoHttp } = require('pino-http');
 const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger');
 
+if (process.env.NODE_ENV === 'production' && !process.env.CLIENT_URL) {
+    throw new Error('CLIENT_URL environment variable is required in production');
+}
+
 const app = express();
-app.use(cors());
+app.disable('x-powered-by');
+app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
 app.use(express.json());
 app.use(pinoHttp({ logger }));
 

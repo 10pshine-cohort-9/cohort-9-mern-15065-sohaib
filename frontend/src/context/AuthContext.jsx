@@ -1,9 +1,15 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import api from '../services/api'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
+import api, { authConfig } from '../services/api'
 const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    const onLogout = () => setUser(null)
+    window.addEventListener('auth:logout', onLogout)
+    return () => window.removeEventListener('auth:logout', onLogout)
+  }, [])
+
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (!token) {
@@ -12,7 +18,7 @@ export function AuthProvider({ children }) {
     }
 
     let active = true
-    api.get('/auth/me')
+    api.get('/auth/me', authConfig())
       .then((res) => {
         if (active && localStorage.getItem('token') === token) {
           setUser(res.data.user)
@@ -32,19 +38,37 @@ export function AuthProvider({ children }) {
   }, [])
 
   const signup = useCallback(async (name, email, password) => {
-    const res = await api.post('/auth/signup', { name, email, password })
-    localStorage.setItem('token', res.data.token)
-    const me = await api.get('/auth/me')
-    setUser(me.data.user)
-    return res.data
+    try {
+      const res = await api.post('/auth/signup', { name, email, password })
+      localStorage.setItem('token', res.data.token)
+      try {
+        const me = await api.get('/auth/me', authConfig())
+        setUser(me.data.user)
+      } catch {
+        localStorage.removeItem('token')
+        setUser(null)
+      }
+      return res.data
+    } catch (err) {
+      throw err
+    }
   }, [])
 
   const login = useCallback(async (email, password) => {
-    const res = await api.post('/auth/login', { email, password })
-    localStorage.setItem('token', res.data.token)
-    const me = await api.get('/auth/me')
-    setUser(me.data.user)
-    return res.data
+    try {
+      const res = await api.post('/auth/login', { email, password })
+      localStorage.setItem('token', res.data.token)
+      try {
+        const me = await api.get('/auth/me', authConfig())
+        setUser(me.data.user)
+      } catch {
+        localStorage.removeItem('token')
+        setUser(null)
+      }
+      return res.data
+    } catch (err) {
+      throw err
+    }
   }, [])
 
   const logout = useCallback(() => {
@@ -52,8 +76,10 @@ export function AuthProvider({ children }) {
     setUser(null)
   }, [])
 
+  const contextValue = useMemo(() => ({ user, loading, login, signup, logout }), [user, loading, login, signup, logout])
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   )
